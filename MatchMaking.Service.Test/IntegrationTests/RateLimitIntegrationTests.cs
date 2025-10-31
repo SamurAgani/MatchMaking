@@ -150,8 +150,9 @@ public class RateLimitIntegrationTests
 
         var results = await Task.WhenAll(tasks);
 
-        results.Should().Contain(false, "at least one request should succeed");
-        results.Should().Contain(true, "at least one request should be rate limited");
+        var values = results.Select(r => r.Value).ToArray();
+        values.Should().Contain(false, "at least one request should succeed");
+        values.Should().Contain(true, "at least one request should be rate limited");
     }
 
     [Fact]

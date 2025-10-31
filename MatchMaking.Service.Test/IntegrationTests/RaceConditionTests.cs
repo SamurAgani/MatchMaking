@@ -1,9 +1,9 @@
 using FluentAssertions;
+using FluentResults;
 using MatchMaking.Service.Controllers;
 using MatchMaking.Service.Services.Abstracts;
 using MatchMaking.Shared.Models;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 using Moq;
 using System.Collections.Concurrent;
 
@@ -14,28 +14,17 @@ public class RaceConditionTests
     [Fact]
     public async Task ConcurrentQueueAdditions_SameTwoUsers_OnlyOneSucceeds()
     {
-        var mockKafkaService = new Mock<IKafkaService>();
-        var mockRateLimitService = new Mock<IRateLimitService>();
-        var mockMatchStorageService = new Mock<IMatchStorageService>();
-        var mockLogger = new Mock<ILogger<MatchMakingController>>();
         var matchmakingService = new Mock<IMatchmakingService>();
-
         var queuedUsers = new ConcurrentBag<string>();
 
-        mockMatchStorageService.Setup(x => x.GetMatchForUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((MatchComplete?)null);
-
-        mockRateLimitService.Setup(x => x.IsUserInQueueAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string userId, CancellationToken ct) => queuedUsers.Contains(userId));
-
-        mockRateLimitService.Setup(x => x.IsRateLimitedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        mockKafkaService.Setup(x => x.PublishMatchRequestAsync(It.IsAny<MatchRequest>(), It.IsAny<CancellationToken>()))
-            .Returns((MatchRequest req, CancellationToken ct) =>
+        matchmakingService.Setup(x => x.SearchMatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string userId, CancellationToken ct) =>
             {
-                queuedUsers.Add(req.UserId);
-                return Task.CompletedTask;
+                if (queuedUsers.Contains(userId))
+                    return Result.Fail(new Error("You are already in the matchmaking queue").WithMetadata("status", 409));
+
+                queuedUsers.Add(userId);
+                return Result.Ok();
             });
 
         var controller = new MatchMakingController(matchmakingService.Object);
@@ -54,39 +43,24 @@ public class RaceConditionTests
 
         var results = await Task.WhenAll(tasks);
 
-        var user1Successes = results.Count(r => r is NoContentResult);
-        var user1Failures = results.Count(r => r is BadRequestObjectResult);
+        var successes = results.Count(r => r is OkResult || r is NoContentResult);
+        var failures = results.Count(r => r is ObjectResult);
 
-        user1Successes.Should().BeGreaterThan(0, "at least some requests should succeed");
-        user1Failures.Should().BeGreaterThan(0, "duplicate requests should be rejected");
+        successes.Should().BeGreaterThan(0, "at least some requests should succeed");
+        failures.Should().BeGreaterThan(0, "duplicate requests should be rejected");
     }
 
     [Fact]
     public async Task ConcurrentRequests_100Users_AllProcessedCorrectly()
     {
-        var mockKafkaService = new Mock<IKafkaService>();
-        var mockRateLimitService = new Mock<IRateLimitService>();
-        var mockMatchStorageService = new Mock<IMatchStorageService>();
-        var mockLogger = new Mock<ILogger<MatchMakingController>>();
         var matchmakingService = new Mock<IMatchmakingService>();
-
         var publishedRequests = new ConcurrentBag<string>();
-        var lockObj = new object();
 
-        mockMatchStorageService.Setup(x => x.GetMatchForUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((MatchComplete?)null);
-
-        mockRateLimitService.Setup(x => x.IsUserInQueueAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        mockRateLimitService.Setup(x => x.IsRateLimitedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        mockKafkaService.Setup(x => x.PublishMatchRequestAsync(It.IsAny<MatchRequest>(), It.IsAny<CancellationToken>()))
-            .Returns((MatchRequest req, CancellationToken ct) =>
+        matchmakingService.Setup(x => x.SearchMatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string userId, CancellationToken ct) =>
             {
-                publishedRequests.Add(req.UserId);
-                return Task.CompletedTask;
+                publishedRequests.Add(userId);
+                return Result.Ok();
             });
 
         var controller = new MatchMakingController(matchmakingService.Object);
@@ -97,31 +71,28 @@ public class RaceConditionTests
 
         var results = await Task.WhenAll(tasks);
 
-        var successCount = results.Count(r => r is NoContentResult);
+        var successCount = results.Count(r => r is OkResult || r is NoContentResult);
         successCount.Should().Be(100, "all 100 unique user requests should succeed");
 
-        publishedRequests.Should().HaveCount(100, "all requests should be published to Kafka");
+        publishedRequests.Should().HaveCount(100, "all requests should be published");
         publishedRequests.Distinct().Should().HaveCount(100, "all user IDs should be unique");
     }
 
     [Fact]
     public async Task ConcurrentMatchRetrieval_WhileMatchBeingStored_ShouldNotCrash()
     {
-        var mockKafkaService = new Mock<IKafkaService>();
-        var mockRateLimitService = new Mock<IRateLimitService>();
-        var mockMatchStorageService = new Mock<IMatchStorageService>();
-        var mockLogger = new Mock<ILogger<MatchMakingController>>();
         var matchmakingService = new Mock<IMatchmakingService>();
-
-        var match = new MatchComplete("match-123", new List<string> { "user1", "user2", "user3" });
+        var match = new MatchDto("match-123", new List<string> { "user1", "user2", "user3" });
         var retrievalCount = 0;
 
-        mockMatchStorageService.Setup(x => x.GetMatchForUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(async () =>
+        matchmakingService.Setup(x => x.GetMatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string userId, CancellationToken ct) =>
             {
                 Interlocked.Increment(ref retrievalCount);
                 await Task.Delay(10);
-                return retrievalCount % 2 == 0 ? match : null;
+                return retrievalCount % 2 == 0
+                    ? Result.Ok(match)
+                    : Result.Fail<MatchDto>(new Error("No match found").WithMetadata("status", 404));
             });
 
         var controller = new MatchMakingController(matchmakingService.Object);
@@ -136,43 +107,34 @@ public class RaceConditionTests
         var results = await Task.WhenAll(tasks);
         results.Should().AllSatisfy(r =>
             r.Should().Match<IActionResult>(result =>
-                result is OkObjectResult || result is NotFoundObjectResult,
-                "should return either OK or NotFound"));
+                result is OkObjectResult || result is ObjectResult,
+                "should return either OK or error response"));
     }
 
     [Fact]
     public async Task ConcurrentDuplicateUsers_WithDifferentStates_HandledCorrectly()
     {
-        var mockKafkaService = new Mock<IKafkaService>();
-        var mockRateLimitService = new Mock<IRateLimitService>();
-        var mockMatchStorageService = new Mock<IMatchStorageService>();
-        var mockLogger = new Mock<ILogger<MatchMakingController>>();
         var matchmakingService = new Mock<IMatchmakingService>();
-
         var userStates = new ConcurrentDictionary<string, int>();
 
-        mockMatchStorageService.Setup(x => x.GetMatchForUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string userId, CancellationToken ct) =>
+        matchmakingService.Setup(x => x.SearchMatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((string userId, CancellationToken ct) =>
             {
                 var state = userStates.GetOrAdd(userId, 0);
-                return state > 2 ? new MatchComplete("match-123", new List<string> { userId }) : null;
-            });
 
-        mockRateLimitService.Setup(x => x.IsUserInQueueAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string userId, CancellationToken ct) =>
-            {
-                var state = userStates.GetOrAdd(userId, 0);
-                return state == 2;
-            });
+                if (state > 2)
+                {
+                    return Task.FromResult(Result.Fail(new Error("You already have an active match")
+                        .WithMetadata("status", 409)));
+                }
+                else if (state == 2)
+                {
+                    return Task.FromResult(Result.Fail(new Error("You are already in the matchmaking queue")
+                        .WithMetadata("status", 409)));
+                }
 
-        mockRateLimitService.Setup(x => x.IsRateLimitedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        mockKafkaService.Setup(x => x.PublishMatchRequestAsync(It.IsAny<MatchRequest>(), It.IsAny<CancellationToken>()))
-            .Returns((MatchRequest req, CancellationToken ct) =>
-            {
-                userStates.AddOrUpdate(req.UserId, 1, (k, v) => v + 1);
-                return Task.CompletedTask;
+                userStates.AddOrUpdate(userId, 1, (k, v) => v + 1);
+                return Task.FromResult(Result.Ok());
             });
 
         var controller = new MatchMakingController(matchmakingService.Object);
@@ -186,35 +148,21 @@ public class RaceConditionTests
         var results = await Task.WhenAll(tasks);
 
         results.Should().NotBeEmpty();
-        results.Should().Contain(r => r is NoContentResult || r is BadRequestObjectResult,
+        results.Should().Contain(r => r is OkResult || r is NoContentResult || r is ObjectResult,
             "requests should be properly handled based on user state");
     }
 
     [Fact]
     public async Task HighConcurrency_StressTest_200SimultaneousRequests()
     {
-        var mockKafkaService = new Mock<IKafkaService>();
         var matchmakingService = new Mock<IMatchmakingService>();
-        var mockRateLimitService = new Mock<IRateLimitService>();
-        var mockMatchStorageService = new Mock<IMatchStorageService>();
-        var mockLogger = new Mock<ILogger<MatchMakingController>>();
-
         var processedCount = 0;
 
-        mockMatchStorageService.Setup(x => x.GetMatchForUserAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((MatchComplete?)null);
-
-        mockRateLimitService.Setup(x => x.IsUserInQueueAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        mockRateLimitService.Setup(x => x.IsRateLimitedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        mockKafkaService.Setup(x => x.PublishMatchRequestAsync(It.IsAny<MatchRequest>(), It.IsAny<CancellationToken>()))
-            .Returns(() =>
+        matchmakingService.Setup(x => x.SearchMatchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string userId, CancellationToken ct) =>
             {
                 Interlocked.Increment(ref processedCount);
-                return Task.CompletedTask;
+                return Result.Ok();
             });
 
         var controller = new MatchMakingController(matchmakingService.Object);
@@ -226,7 +174,9 @@ public class RaceConditionTests
         var results = await Task.WhenAll(tasks);
 
         results.Should().HaveCount(200);
-        results.Should().AllBeOfType<NoContentResult>("all unique users should succeed");
+        results.Should().AllSatisfy(r => r.Should().Match<IActionResult>(
+            result => result is OkResult || result is NoContentResult,
+            "all unique users should succeed"));
         processedCount.Should().Be(200, "all requests should be processed");
     }
 }
