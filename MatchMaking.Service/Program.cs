@@ -25,12 +25,12 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     return ConnectionMultiplexer.Connect(redisConnectionString);
 });
 
-builder.Services.AddSingleton<IMatchmakingService, MatchmakingService>();
 builder.Services.AddSingleton<IRateLimitService, RedisRateLimitService>();
 builder.Services.AddSingleton<IMatchStorageService, RedisMatchStorageService>();
 
 builder.Services.AddSingleton<IKafkaService, KafkaService>();
 builder.Services.AddHostedService<KafkaBackgroundService>();
+builder.Services.AddSingleton<IMatchmakingService, MatchmakingService>();
 
 var app = builder.Build();
 
