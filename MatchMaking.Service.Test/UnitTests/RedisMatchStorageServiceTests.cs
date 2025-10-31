@@ -70,9 +70,9 @@ public class RedisMatchStorageServiceTests
 
         var result = await _service.GetMatchForUserAsync(userId, CancellationToken.None);
 
-        result.Should().NotBeNull();
-        result!.MatchId.Should().Be(matchId);
-        result.UserIds.Should().HaveCount(3);
+        result.Value.Should().NotBeNull();
+        result.Value!.MatchId.Should().Be(matchId);
+        result.Value.UserIds.Should().HaveCount(3);
     }
 
     [Fact]
@@ -87,6 +87,6 @@ public class RedisMatchStorageServiceTests
 
         var result = await _service.GetMatchForUserAsync(userId, CancellationToken.None);
 
-        result.Should().BeNull();
+        result.Value.Should().BeNull();
     }
 }

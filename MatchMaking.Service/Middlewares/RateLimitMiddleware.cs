@@ -37,7 +37,7 @@ namespace MatchMaking.Service.Middlewares
             var cancellationToken = context.RequestAborted;
             var isRateLimited = await rateLimitService.IsRateLimitedAsync(userId, cancellationToken);
 
-            if (isRateLimited)
+            if (isRateLimited.Value)
             {
                 _logger.LogWarning("Rate limit exceeded for user {UserId}", userId);
                 context.Response.StatusCode = StatusCodes.Status429TooManyRequests;

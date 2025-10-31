@@ -25,6 +25,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     return ConnectionMultiplexer.Connect(redisConnectionString);
 });
 
+builder.Services.AddSingleton<IMatchmakingService, MatchmakingService>();
 builder.Services.AddSingleton<IRateLimitService, RedisRateLimitService>();
 builder.Services.AddSingleton<IMatchStorageService, RedisMatchStorageService>();
 
@@ -41,6 +42,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
 
 app.UseAuthorization();

@@ -1,3 +1,4 @@
+using FluentResults;
 using MatchMaking.Service.Services.Abstracts;
 using StackExchange.Redis;
 
@@ -20,7 +21,7 @@ namespace MatchMaking.Service.Services.Concrete
             _minIntervalMs = configuration.GetValue<int>("RateLimit:MinIntervalMs", 100);
         }
 
-        public async Task<bool> IsRateLimitedAsync(string userId, CancellationToken cancellationToken = default)
+        public async Task<Result<bool>> IsRateLimitedAsync(string userId, CancellationToken cancellationToken = default)
         {
             var db = _redis.GetDatabase();
             var key = $"ratelimit:{userId}";
@@ -28,12 +29,12 @@ namespace MatchMaking.Service.Services.Concrete
             try
             {
                 var nowTicks = DateTimeOffset.UtcNow.Ticks;
-
                 var lastRequestTicks = await db.StringGetAsync(key);
 
-                if (lastRequestTicks.HasValue)
+                if (lastRequestTicks.HasValue &&
+                    long.TryParse(lastRequestTicks!, out var ticks))
                 {
-                    var lastRequest = new DateTimeOffset(long.Parse(lastRequestTicks!), TimeSpan.Zero);
+                    var lastRequest = new DateTimeOffset(ticks, TimeSpan.Zero);
                     var elapsed = DateTimeOffset.UtcNow - lastRequest;
 
                     if (elapsed.TotalMilliseconds < _minIntervalMs)
@@ -43,30 +44,29 @@ namespace MatchMaking.Service.Services.Concrete
                             userId,
                             elapsed.TotalMilliseconds,
                             _minIntervalMs);
-                        return true;
+
+                        return Result.Ok(true);
                     }
                 }
 
                 await db.StringSetAsync(key, nowTicks.ToString(), TimeSpan.FromMinutes(1));
-
                 _logger.LogDebug("Rate limit check passed for user {UserId}", userId);
-                return false;
+                return Result.Ok(false);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking rate limit for user {UserId}", userId);
-                return false;
+                return Result.Fail<bool>(new Error("Error checking rate limit").CausedBy(ex));
             }
         }
 
-        public async Task<bool> IsUserInQueueAsync(string userId, CancellationToken cancellationToken = default)
+        public async Task<Result<bool>> IsUserInQueueAsync(string userId, CancellationToken cancellationToken = default)
         {
             var db = _redis.GetDatabase();
 
             try
             {
                 var waitingPlayers = await db.ListRangeAsync(WaitingPlayersKey);
-
                 var isInQueue = waitingPlayers.Any(player => player.ToString() == userId);
 
                 if (isInQueue)
@@ -74,12 +74,12 @@ namespace MatchMaking.Service.Services.Concrete
                     _logger.LogWarning("User {UserId} is already in the matchmaking queue", userId);
                 }
 
-                return isInQueue;
+                return Result.Ok(isInQueue);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking if user {UserId} is in queue", userId);
-                return false;
+                return Result.Fail<bool>(new Error("Error checking queue presence").CausedBy(ex));
             }
         }
     }

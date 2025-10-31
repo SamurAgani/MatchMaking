@@ -57,7 +57,7 @@ public class RedisRateLimitServiceTests
 
         var result = await _service.IsRateLimitedAsync(userId, CancellationToken.None);
 
-        result.Should().BeFalse();
+        result.Value.Should().BeFalse();
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public class RedisRateLimitServiceTests
 
         var result = await _service.IsRateLimitedAsync(userId, CancellationToken.None);
 
-        result.Should().BeTrue();
+        result.Value.Should().BeTrue();
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class RedisRateLimitServiceTests
 
         var result = await _service.IsRateLimitedAsync(userId, CancellationToken.None);
 
-        result.Should().BeFalse();
+        result.Value.Should().BeFalse();
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class RedisRateLimitServiceTests
 
         var result = await _service.IsUserInQueueAsync(userId, CancellationToken.None);
 
-        result.Should().BeTrue();
+        result.Value.Should().BeTrue();
     }
 
     [Fact]
@@ -134,6 +134,6 @@ public class RedisRateLimitServiceTests
 
         var result = await _service.IsUserInQueueAsync(userId, CancellationToken.None);
 
-        result.Should().BeFalse();
+        result.Value.Should().BeFalse();
     }
 }

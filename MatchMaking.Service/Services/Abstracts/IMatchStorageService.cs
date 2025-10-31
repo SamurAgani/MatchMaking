@@ -1,10 +1,12 @@
+using FluentResults;
 using MatchMaking.Shared.Models;
 
 namespace MatchMaking.Service.Services.Abstracts
 {
     public interface IMatchStorageService
     {
-        Task StoreMatchForUserAsync(string userId, MatchComplete matchComplete, CancellationToken cancellationToken = default);
-        Task<MatchComplete?> GetMatchForUserAsync(string userId, CancellationToken cancellationToken = default);
+        Task<Result> StoreMatchForUserAsync(string userId, MatchComplete matchComplete, CancellationToken cancellationToken = default);
+
+        Task<Result<MatchComplete?>> GetMatchForUserAsync(string userId, CancellationToken cancellationToken = default);
     }
 }

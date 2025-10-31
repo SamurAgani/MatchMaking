@@ -1,11 +1,12 @@
+using FluentResults;
 using MatchMaking.Shared.Models;
 
 namespace MatchMaking.Service.Services.Abstracts
 {
-    public interface IKafkaService
+    public interface IKafkaService : IDisposable
     {
-        Task PublishMatchRequestAsync(MatchRequest matchRequest, CancellationToken cancellationToken = default);
+        Task<Result> PublishMatchRequestAsync(MatchRequest matchRequest, CancellationToken cancellationToken = default);
 
-        Task StartConsumingAsync(CancellationToken stoppingToken);
+        Task<Result> StartConsumingAsync(CancellationToken stoppingToken);
     }
 }

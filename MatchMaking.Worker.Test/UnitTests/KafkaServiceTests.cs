@@ -1,13 +1,10 @@
 using FluentAssertions;
-using Confluent.Kafka;
-using MatchMaking.Shared.Constants;
 using MatchMaking.Shared.Models;
 using MatchMaking.Worker.Services.Abstracts;
 using MatchMaking.Worker.Services.Concretes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
-using System.Text.Json;
 
 namespace MatchMaking.Worker.Test.UnitTests;
 

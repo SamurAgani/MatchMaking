@@ -1,3 +1,4 @@
+using FluentResults;
 using MatchMaking.Service.Services.Abstracts;
 using MatchMaking.Shared.Models;
 using StackExchange.Redis;
@@ -18,7 +19,7 @@ namespace MatchMaking.Service.Services.Concrete
             _logger = logger;
         }
 
-        public async Task StoreMatchForUserAsync(string userId, MatchComplete matchComplete, CancellationToken cancellationToken = default)
+        public async Task<Result> StoreMatchForUserAsync(string userId, MatchComplete matchComplete, CancellationToken cancellationToken = default)
         {
             var db = _redis.GetDatabase();
             var key = $"user:{userId}:match";
@@ -26,17 +27,18 @@ namespace MatchMaking.Service.Services.Concrete
             try
             {
                 var matchJson = JsonSerializer.Serialize(matchComplete);
-
                 await db.StringSetAsync(key, matchJson, TimeSpan.FromHours(1));
+                return Result.Ok();
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to store match for user {UserId}", userId);
-                throw;
+                return Result.Fail(new Error("Failed to store match for user").CausedBy(ex)
+                    .WithMetadata("UserId", userId));
             }
         }
 
-        public async Task<MatchComplete?> GetMatchForUserAsync(string userId, CancellationToken cancellationToken = default)
+        public async Task<Result<MatchComplete?>> GetMatchForUserAsync(string userId, CancellationToken cancellationToken = default)
         {
             var db = _redis.GetDatabase();
             var key = $"user:{userId}:match";
@@ -48,17 +50,20 @@ namespace MatchMaking.Service.Services.Concrete
                 if (!matchJson.HasValue)
                 {
                     _logger.LogDebug("No match found for user {UserId}", userId);
-                    return null;
+                    return Result.Ok<MatchComplete?>(null);
                 }
 
-                var matchComplete = JsonSerializer.Deserialize<MatchComplete>(matchJson!);
+                MatchComplete? matchComplete;
+                
+                matchComplete = JsonSerializer.Deserialize<MatchComplete>(matchJson!);
 
-                return matchComplete;
+                return Result.Ok<MatchComplete?>(matchComplete);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to retrieve match for user {UserId}", userId);
-                throw;
+                return Result.Fail<MatchComplete?>(new Error("Failed to retrieve match for user").CausedBy(ex)
+                    .WithMetadata("UserId", userId));
             }
         }
     }

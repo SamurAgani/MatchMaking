@@ -46,10 +46,10 @@ public class RateLimitIntegrationTests
         var userId = "test-user";
 
         var result1 = await service.IsRateLimitedAsync(userId, CancellationToken.None);
-        result1.Should().BeFalse("first request should not be rate limited");
+        result1.Value.Should().BeFalse("first request should not be rate limited");
 
         var result2 = await service.IsRateLimitedAsync(userId, CancellationToken.None);
-        result2.Should().BeTrue("second request within 100ms should be rate limited");
+        result2.Value.Should().BeTrue("second request within 100ms should be rate limited");
     }
 
     [Fact]
@@ -94,8 +94,8 @@ public class RateLimitIntegrationTests
         var user1Result = await service.IsRateLimitedAsync("user1", CancellationToken.None);
         var user2Result = await service.IsRateLimitedAsync("user2", CancellationToken.None);
 
-        user1Result.Should().BeFalse("user1 first request should not be limited");
-        user2Result.Should().BeFalse("user2 should be independent of user1");
+        user1Result.Value.Should().BeFalse("user1 first request should not be limited");
+        user2Result.Value.Should().BeFalse("user2 should be independent of user1");
     }
 
     [Fact]
@@ -191,16 +191,16 @@ public class RateLimitIntegrationTests
         var userId = "delayed-user";
 
         var result1 = await service.IsRateLimitedAsync(userId, CancellationToken.None);
-        result1.Should().BeFalse("first request should succeed");
+        result1.Value.Should().BeFalse("first request should succeed");
 
         await Task.Delay(60);
 
         var result2 = await service.IsRateLimitedAsync(userId, CancellationToken.None);
-        result2.Should().BeFalse("second request after delay should succeed");
+        result2.Value.Should().BeFalse("second request after delay should succeed");
 
         await Task.Delay(60);
 
         var result3 = await service.IsRateLimitedAsync(userId, CancellationToken.None);
-        result3.Should().BeFalse("third request after delay should succeed");
+        result3.Value.Should().BeFalse("third request after delay should succeed");
     }
 }

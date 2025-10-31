@@ -18,6 +18,7 @@ public class RaceConditionTests
         var mockRateLimitService = new Mock<IRateLimitService>();
         var mockMatchStorageService = new Mock<IMatchStorageService>();
         var mockLogger = new Mock<ILogger<MatchMakingController>>();
+        var matchmakingService = new Mock<IMatchmakingService>();
 
         var queuedUsers = new ConcurrentBag<string>();
 
@@ -37,11 +38,7 @@ public class RaceConditionTests
                 return Task.CompletedTask;
             });
 
-        var controller = new MatchMakingController(
-            mockKafkaService.Object,
-            mockRateLimitService.Object,
-            mockMatchStorageService.Object,
-            mockLogger.Object);
+        var controller = new MatchMakingController(matchmakingService.Object);
 
         var userId1 = "race-user-1";
         var userId2 = "race-user-2";
@@ -71,6 +68,7 @@ public class RaceConditionTests
         var mockRateLimitService = new Mock<IRateLimitService>();
         var mockMatchStorageService = new Mock<IMatchStorageService>();
         var mockLogger = new Mock<ILogger<MatchMakingController>>();
+        var matchmakingService = new Mock<IMatchmakingService>();
 
         var publishedRequests = new ConcurrentBag<string>();
         var lockObj = new object();
@@ -91,11 +89,7 @@ public class RaceConditionTests
                 return Task.CompletedTask;
             });
 
-        var controller = new MatchMakingController(
-            mockKafkaService.Object,
-            mockRateLimitService.Object,
-            mockMatchStorageService.Object,
-            mockLogger.Object);
+        var controller = new MatchMakingController(matchmakingService.Object);
 
         var tasks = Enumerable.Range(1, 100)
             .Select(i => controller.SearchMatch($"user-{i}", CancellationToken.None))
@@ -117,6 +111,7 @@ public class RaceConditionTests
         var mockRateLimitService = new Mock<IRateLimitService>();
         var mockMatchStorageService = new Mock<IMatchStorageService>();
         var mockLogger = new Mock<ILogger<MatchMakingController>>();
+        var matchmakingService = new Mock<IMatchmakingService>();
 
         var match = new MatchComplete("match-123", new List<string> { "user1", "user2", "user3" });
         var retrievalCount = 0;
@@ -129,11 +124,7 @@ public class RaceConditionTests
                 return retrievalCount % 2 == 0 ? match : null;
             });
 
-        var controller = new MatchMakingController(
-            mockKafkaService.Object,
-            mockRateLimitService.Object,
-            mockMatchStorageService.Object,
-            mockLogger.Object);
+        var controller = new MatchMakingController(matchmakingService.Object);
 
         var tasks = Enumerable.Range(0, 50)
             .Select(_ => controller.GetMatch("user1", CancellationToken.None))
@@ -156,6 +147,7 @@ public class RaceConditionTests
         var mockRateLimitService = new Mock<IRateLimitService>();
         var mockMatchStorageService = new Mock<IMatchStorageService>();
         var mockLogger = new Mock<ILogger<MatchMakingController>>();
+        var matchmakingService = new Mock<IMatchmakingService>();
 
         var userStates = new ConcurrentDictionary<string, int>();
 
@@ -183,11 +175,7 @@ public class RaceConditionTests
                 return Task.CompletedTask;
             });
 
-        var controller = new MatchMakingController(
-            mockKafkaService.Object,
-            mockRateLimitService.Object,
-            mockMatchStorageService.Object,
-            mockLogger.Object);
+        var controller = new MatchMakingController(matchmakingService.Object);
 
         var userId = "state-test-user";
 
@@ -206,6 +194,7 @@ public class RaceConditionTests
     public async Task HighConcurrency_StressTest_200SimultaneousRequests()
     {
         var mockKafkaService = new Mock<IKafkaService>();
+        var matchmakingService = new Mock<IMatchmakingService>();
         var mockRateLimitService = new Mock<IRateLimitService>();
         var mockMatchStorageService = new Mock<IMatchStorageService>();
         var mockLogger = new Mock<ILogger<MatchMakingController>>();
@@ -228,11 +217,7 @@ public class RaceConditionTests
                 return Task.CompletedTask;
             });
 
-        var controller = new MatchMakingController(
-            mockKafkaService.Object,
-            mockRateLimitService.Object,
-            mockMatchStorageService.Object,
-            mockLogger.Object);
+        var controller = new MatchMakingController(matchmakingService.Object);
 
         var tasks = Enumerable.Range(1, 200)
             .Select(i => controller.SearchMatch($"stress-user-{i}", CancellationToken.None))
