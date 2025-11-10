@@ -1,4 +1,7 @@
+using Confluent.Kafka;
 using FluentAssertions;
+using MatchMaking.Infrastructure.Kafka.Abstractions;
+using MatchMaking.Shared.Models;
 using MatchMaking.Worker.Services.Concretes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -14,6 +17,7 @@ public class MatchMakingServiceTests
     private readonly Mock<IConfiguration> _mockConfiguration;
     private readonly Mock<IConfigurationSection> _mockConfigSection;
     private readonly Mock<ILogger<MatchMakingService>> _mockLogger;
+    private readonly Mock<IKafkaProducer<string, MatchComplete>> _mockProducer;
     private readonly MatchMakingService _service;
 
     public MatchMakingServiceTests()
@@ -23,6 +27,7 @@ public class MatchMakingServiceTests
         _mockConfiguration = new Mock<IConfiguration>();
         _mockConfigSection = new Mock<IConfigurationSection>();
         _mockLogger = new Mock<ILogger<MatchMakingService>>();
+        _mockProducer = new Mock<IKafkaProducer<string, MatchComplete>>();
 
         _mockRedis.Setup(x => x.GetDatabase(It.IsAny<int>(), It.IsAny<object>()))
             .Returns(_mockDatabase.Object);
@@ -31,14 +36,26 @@ public class MatchMakingServiceTests
         _mockConfiguration.Setup(x => x.GetSection("PlayersPerMatch"))
             .Returns(_mockConfigSection.Object);
 
+        _mockProducer.Setup(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<MatchComplete>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeliveryResult<string, MatchComplete>
+            {
+                Status = PersistenceStatus.Persisted,
+                Offset = new Offset(0)
+            });
+
         _service = new MatchMakingService(
             _mockRedis.Object,
             _mockConfiguration.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _mockProducer.Object);
     }
 
     [Fact]
-    public async Task TryCreateMatchAsync_WithLessThan3Players_ReturnsNull()
+    public async Task ProcessMatchRequestAsync_WithLessThan3Players_ReturnsTrue()
     {
         var userId = "user1";
 
@@ -61,19 +78,36 @@ public class MatchMakingServiceTests
             It.IsAny<CommandFlags>()))
             .ReturnsAsync(1);
 
-        var result = await _service.TryCreateMatchAsync(userId, CancellationToken.None);
+        var matchRequest = new MatchRequest(userId);
+        var message = new Message<string, MatchRequest>
+        {
+            Key = userId,
+            Value = matchRequest
+        };
+        var consumeResult = new ConsumeResult<string, MatchRequest>
+        {
+            Message = message
+        };
 
-        result.Should().BeNull("not enough players to create a match");
+        var result = await _service.ProcessMatchRequestAsync(consumeResult, CancellationToken.None);
+
+        result.Should().BeTrue("request should be processed successfully");
         _mockDatabase.Verify(x => x.ListRightPushAsync(
             It.Is<RedisKey>(k => k.ToString() == "waiting_players"),
             It.Is<RedisValue>(v => v.ToString() == userId),
             It.IsAny<When>(),
             It.IsAny<CommandFlags>()),
             Times.Once);
+        _mockProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<MatchComplete>(),
+            It.IsAny<CancellationToken>()),
+            Times.Never, "no match should be created with less than 3 players");
     }
 
     [Fact]
-    public async Task TryCreateMatchAsync_WithExactly3Players_CreatesMatch()
+    public async Task ProcessMatchRequestAsync_WithExactly3Players_CreatesMatch()
     {
         var userId = "user3";
         var existingPlayers = new RedisValue[] { "user1", "user2" };
@@ -103,16 +137,33 @@ public class MatchMakingServiceTests
             It.IsAny<CommandFlags>()))
             .ReturnsAsync(() => playerQueue.Count > 0 ? new RedisValue(playerQueue.Dequeue()) : RedisValue.Null);
 
-        var result = await _service.TryCreateMatchAsync(userId, CancellationToken.None);
+        var matchRequest = new MatchRequest(userId);
+        var message = new Message<string, MatchRequest>
+        {
+            Key = userId,
+            Value = matchRequest
+        };
+        var consumeResult = new ConsumeResult<string, MatchRequest>
+        {
+            Message = message
+        };
 
-        result.Should().NotBeNull("we have enough players");
-        result!.UserIds.Should().HaveCount(3);
-        result.UserIds.Should().Contain(new[] { "user1", "user2", "user3" });
-        result.MatchId.Should().NotBeNullOrEmpty();
+        var result = await _service.ProcessMatchRequestAsync(consumeResult, CancellationToken.None);
+
+        result.Should().BeTrue("request should be processed successfully");
+        _mockProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.Is<MatchComplete>(m => m.UserIds.Count == 3 &&
+                                      m.UserIds.Contains("user1") &&
+                                      m.UserIds.Contains("user2") &&
+                                      m.UserIds.Contains("user3")),
+            It.IsAny<CancellationToken>()),
+            Times.Once, "a match should be created and published");
     }
 
     [Fact]
-    public async Task TryCreateMatchAsync_WithDuplicateUser_ReturnsNull()
+    public async Task ProcessMatchRequestAsync_WithDuplicateUser_ReturnsTrue()
     {
         var userId = "user1";
         var existingPlayers = new RedisValue[] { "user1", "user2" };
@@ -124,19 +175,36 @@ public class MatchMakingServiceTests
             It.IsAny<CommandFlags>()))
             .ReturnsAsync(existingPlayers);
 
-        var result = await _service.TryCreateMatchAsync(userId, CancellationToken.None);
+        var matchRequest = new MatchRequest(userId);
+        var message = new Message<string, MatchRequest>
+        {
+            Key = userId,
+            Value = matchRequest
+        };
+        var consumeResult = new ConsumeResult<string, MatchRequest>
+        {
+            Message = message
+        };
 
-        result.Should().BeNull("user is already in queue");
+        var result = await _service.ProcessMatchRequestAsync(consumeResult, CancellationToken.None);
+
+        result.Should().BeTrue("request should be processed successfully even if user is duplicate");
         _mockDatabase.Verify(x => x.ListRightPushAsync(
             It.IsAny<RedisKey>(),
             It.IsAny<RedisValue>(),
             It.IsAny<When>(),
             It.IsAny<CommandFlags>()),
             Times.Never, "duplicate user should not be added");
+        _mockProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<MatchComplete>(),
+            It.IsAny<CancellationToken>()),
+            Times.Never, "no match should be created for duplicate user");
     }
 
     [Fact]
-    public async Task TryCreateMatchAsync_WithMoreThan3Players_CreatesMatchAndLeavesRest()
+    public async Task ProcessMatchRequestAsync_WithMoreThan3Players_CreatesMatchAndLeavesRest()
     {
         var userId = "user4";
         var existingPlayers = new RedisValue[] { "user1", "user2", "user3" };
@@ -166,10 +234,26 @@ public class MatchMakingServiceTests
             It.IsAny<CommandFlags>()))
             .ReturnsAsync(() => playerQueue.Count > 0 ? new RedisValue(playerQueue.Dequeue()) : RedisValue.Null);
 
-        var result = await _service.TryCreateMatchAsync(userId, CancellationToken.None);
+        var matchRequest = new MatchRequest(userId);
+        var message = new Message<string, MatchRequest>
+        {
+            Key = userId,
+            Value = matchRequest
+        };
+        var consumeResult = new ConsumeResult<string, MatchRequest>
+        {
+            Message = message
+        };
 
-        result.Should().NotBeNull("we have enough players");
-        result!.UserIds.Should().HaveCount(3, "only 3 players per match");
+        var result = await _service.ProcessMatchRequestAsync(consumeResult, CancellationToken.None);
+
+        result.Should().BeTrue("request should be processed successfully");
+        _mockProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.Is<MatchComplete>(m => m.UserIds.Count == 3),
+            It.IsAny<CancellationToken>()),
+            Times.Once, "a match should be created with exactly 3 players");
         _mockDatabase.Verify(x => x.ListLeftPopAsync(
             It.Is<RedisKey>(k => k.ToString() == "waiting_players"),
             It.IsAny<CommandFlags>()),
@@ -177,7 +261,7 @@ public class MatchMakingServiceTests
     }
 
     [Fact]
-    public async Task TryCreateMatchAsync_WhenRedisThrowsException_ThrowsException()
+    public async Task ProcessMatchRequestAsync_WhenRedisThrowsException_ReturnsFalse()
     {
         var userId = "user1";
 
@@ -188,7 +272,19 @@ public class MatchMakingServiceTests
             It.IsAny<CommandFlags>()))
             .ThrowsAsync(new RedisConnectionException(ConnectionFailureType.UnableToConnect, "Connection failed"));
 
-        await FluentActions.Invoking(() => _service.TryCreateMatchAsync(userId, CancellationToken.None))
-            .Should().ThrowAsync<RedisConnectionException>();
+        var matchRequest = new MatchRequest(userId);
+        var message = new Message<string, MatchRequest>
+        {
+            Key = userId,
+            Value = matchRequest
+        };
+        var consumeResult = new ConsumeResult<string, MatchRequest>
+        {
+            Message = message
+        };
+
+        var result = await _service.ProcessMatchRequestAsync(consumeResult, CancellationToken.None);
+
+        result.Should().BeFalse("exception should be caught and false returned");
     }
 }

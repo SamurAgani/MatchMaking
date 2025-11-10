@@ -66,53 +66,53 @@ services:
       kafka-topics --bootstrap-server kafka:29092 --list
       "
 
-  matchmaking-service:
-    build:
-      context: .
-      dockerfile: MatchMaking.Service/Dockerfile
-    container_name: matchmaking-service
-    depends_on:
-      - kafka
-      - redis
-    ports:
-      - "8080:8080"
-      - "8081:8081"
-    environment:
-      ASPNETCORE_ENVIRONMENT: Development
-      Kafka__BootstrapServers: kafka:29092
-      Kafka__RequestTopic: matchmaking.request
-      Kafka__CompleteTopic: matchmaking.complete
-      Redis__ConnectionString: redis:6379
+  # matchmaking-service:
+  #   build:
+  #     context: .
+  #     dockerfile: MatchMaking.Service/Dockerfile
+  #   container_name: matchmaking-service
+  #   depends_on:
+  #     - kafka
+  #     - redis
+  #   ports:
+  #     - "8080:8080"
+  #     - "8081:8081"
+  #   environment:
+  #     ASPNETCORE_ENVIRONMENT: Development
+  #     Kafka__BootstrapServers: kafka:29092
+  #     Kafka__RequestTopic: matchmaking.request
+  #     Kafka__CompleteTopic: matchmaking.complete
+  #     Redis__ConnectionString: redis:6379
 
-  matchmaking-worker-1:
-    build:
-      context: .
-      dockerfile: MatchMaking.Worker/Dockerfile
-    container_name: matchmaking-worker-1
-    depends_on:
-      - kafka
-      - redis
-    environment:
-      Kafka__BootstrapServers: kafka:29092
-      Kafka__RequestTopic: matchmaking.request
-      Kafka__CompleteTopic: matchmaking.complete
-      Redis__ConnectionString: redis:6379
-      UsersPerMatch: 3
+  # matchmaking-worker-1:
+  #   build:
+  #     context: .
+  #     dockerfile: MatchMaking.Worker/Dockerfile
+  #   container_name: matchmaking-worker-1
+  #   depends_on:
+  #     - kafka
+  #     - redis
+  #   environment:
+  #     Kafka__BootstrapServers: kafka:29092
+  #     Kafka__RequestTopic: matchmaking.request
+  #     Kafka__CompleteTopic: matchmaking.complete
+  #     Redis__ConnectionString: redis:6379
+  #     UsersPerMatch: 3
 
-  matchmaking-worker-2:
-    build:
-      context: .
-      dockerfile: MatchMaking.Worker/Dockerfile
-    container_name: matchmaking-worker-2
-    depends_on:
-      - kafka
-      - redis
-    environment:
-      Kafka__BootstrapServers: kafka:29092
-      Kafka__RequestTopic: matchmaking.request
-      Kafka__CompleteTopic: matchmaking.complete
-      Redis__ConnectionString: redis:6379
-      UsersPerMatch: 3
+  # matchmaking-worker-2:
+  #   build:
+  #     context: .
+  #     dockerfile: MatchMaking.Worker/Dockerfile
+  #   container_name: matchmaking-worker-2
+  #   depends_on:
+  #     - kafka
+  #     - redis
+  #   environment:
+  #     Kafka__BootstrapServers: kafka:29092
+  #     Kafka__RequestTopic: matchmaking.request
+  #     Kafka__CompleteTopic: matchmaking.complete
+  #     Redis__ConnectionString: redis:6379
+  #     UsersPerMatch: 3
 
 volumes:
   redis_data:

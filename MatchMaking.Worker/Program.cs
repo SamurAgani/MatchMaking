@@ -1,3 +1,5 @@
+using MatchMaking.Infrastructure.Kafka.Extensions;
+using MatchMaking.Shared.Models;
 using MatchMaking.Worker;
 using MatchMaking.Worker.Services.Abstracts;
 using MatchMaking.Worker.Services.Concretes;
@@ -19,7 +21,9 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 });
 
 builder.Services.AddSingleton<IMatchMakingService, MatchMakingService>();
-builder.Services.AddSingleton<IKafkaService, KafkaService>();
+
+builder.Services.AddKafkaConsumer<string, MatchRequest>(builder.Configuration, "Kafka:Consumer:Worker");
+builder.Services.AddKafkaProducer<string, MatchComplete>(builder.Configuration, "Kafka:Producer:Worker");
 
 builder.Services.AddHostedService<Worker>();
 

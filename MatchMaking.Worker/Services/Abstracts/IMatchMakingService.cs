@@ -1,9 +1,12 @@
+using Confluent.Kafka;
 using MatchMaking.Shared.Models;
 
 namespace MatchMaking.Worker.Services.Abstracts
 {
     public interface IMatchMakingService
     {
-        Task<MatchComplete?> TryCreateMatchAsync(string userId, CancellationToken cancellationToken = default);
+        Task<bool> ProcessMatchRequestAsync(
+           ConsumeResult<string, MatchRequest> consumeResult,
+           CancellationToken cancellationToken);
     }
 }

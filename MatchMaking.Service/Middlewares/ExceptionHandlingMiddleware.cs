@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using MatchMaking.Service.Extensions;
 
 namespace MatchMaking.Service.Middlewares;
 public class ExceptionHandlingMiddleware
@@ -34,28 +35,5 @@ public class ExceptionHandlingMiddleware
 
             context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
         }
-    }
-}
-
-public static class ExceptionExtension
-{
-    public static string GetInnerExceptions(this Exception? e)
-    {
-
-        if (e == null)
-        {
-            return string.Empty;
-        }
-
-        string messages = string.Empty;
-        messages += "\n\n\n\n";
-        while (e != null)
-        {
-            messages += e.Message + " \n";
-
-            e = e.InnerException;
-        }
-        messages += "\n\n----------------------------------------------------------------------------------------------\n\n";
-        return messages;
     }
 }

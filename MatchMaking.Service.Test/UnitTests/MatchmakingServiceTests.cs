@@ -1,5 +1,8 @@
+using Confluent.Kafka;
 using FluentAssertions;
 using FluentResults;
+using MatchMaking.Infrastructure.Kafka.Abstractions;
+using MatchMaking.Service.DTOs;
 using MatchMaking.Service.Services.Abstracts;
 using MatchMaking.Service.Services.Concrete;
 using MatchMaking.Shared.Models;
@@ -10,7 +13,7 @@ namespace MatchMaking.Service.Test.UnitTests;
 
 public class MatchmakingServiceTests
 {
-    private readonly Mock<IKafkaService> _mockKafkaService;
+    private readonly Mock<IKafkaProducer<string, MatchRequest>> _mockKafkaProducer;
     private readonly Mock<IRateLimitService> _mockRateLimitService;
     private readonly Mock<IMatchStorageService> _mockMatchStorageService;
     private readonly Mock<ILogger<MatchmakingService>> _mockLogger;
@@ -18,13 +21,24 @@ public class MatchmakingServiceTests
 
     public MatchmakingServiceTests()
     {
-        _mockKafkaService = new Mock<IKafkaService>();
+        _mockKafkaProducer = new Mock<IKafkaProducer<string, MatchRequest>>();
         _mockRateLimitService = new Mock<IRateLimitService>();
         _mockMatchStorageService = new Mock<IMatchStorageService>();
         _mockLogger = new Mock<ILogger<MatchmakingService>>();
 
+        _mockKafkaProducer.Setup(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<MatchRequest>(),
+            It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DeliveryResult<string, MatchRequest>
+            {
+                Status = PersistenceStatus.Persisted,
+                Offset = new Offset(0)
+            });
+
         _service = new MatchmakingService(
-            _mockKafkaService.Object,
+            _mockKafkaProducer.Object,
             _mockRateLimitService.Object,
             _mockMatchStorageService.Object,
             _mockLogger.Object
@@ -41,14 +55,13 @@ public class MatchmakingServiceTests
         _mockRateLimitService
             .Setup(x => x.IsUserInQueueAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Ok(false));
-        _mockKafkaService
-            .Setup(x => x.PublishMatchRequestAsync(It.IsAny<MatchRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Ok());
 
         var result = await _service.SearchMatchAsync(userId, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        _mockKafkaService.Verify(x => x.PublishMatchRequestAsync(
+        _mockKafkaProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.Is<string>(k => k == userId),
             It.Is<MatchRequest>(m => m.UserId == userId),
             It.IsAny<CancellationToken>()),
             Times.Once);
@@ -67,7 +80,9 @@ public class MatchmakingServiceTests
         result.Errors[0].Message.Should().Be("UserId is required");
         result.Errors[0].Metadata.Should().ContainKey("status");
         result.Errors[0].Metadata["status"].Should().Be(400);
-        _mockKafkaService.Verify(x => x.PublishMatchRequestAsync(
+        _mockKafkaProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
             It.IsAny<MatchRequest>(),
             It.IsAny<CancellationToken>()),
             Times.Never);
@@ -91,7 +106,9 @@ public class MatchmakingServiceTests
         result.Errors[0].Metadata["status"].Should().Be(409);
         result.Errors[0].Metadata.Should().ContainKey("matchId");
         result.Errors[0].Metadata["matchId"].Should().Be("match-id-123");
-        _mockKafkaService.Verify(x => x.PublishMatchRequestAsync(
+        _mockKafkaProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
             It.IsAny<MatchRequest>(),
             It.IsAny<CancellationToken>()),
             Times.Never);
@@ -115,7 +132,9 @@ public class MatchmakingServiceTests
         result.Errors[0].Message.Should().Be("You are already in the matchmaking queue");
         result.Errors[0].Metadata.Should().ContainKey("status");
         result.Errors[0].Metadata["status"].Should().Be(409);
-        _mockKafkaService.Verify(x => x.PublishMatchRequestAsync(
+        _mockKafkaProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
             It.IsAny<MatchRequest>(),
             It.IsAny<CancellationToken>()),
             Times.Never);
@@ -136,7 +155,9 @@ public class MatchmakingServiceTests
         result.Errors[0].Message.Should().Be("Failed to check existing match");
         result.Errors[0].Metadata.Should().ContainKey("status");
         result.Errors[0].Metadata["status"].Should().Be(500);
-        _mockKafkaService.Verify(x => x.PublishMatchRequestAsync(
+        _mockKafkaProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
             It.IsAny<MatchRequest>(),
             It.IsAny<CancellationToken>()),
             Times.Never);
@@ -160,7 +181,9 @@ public class MatchmakingServiceTests
         result.Errors[0].Message.Should().Be("Failed to check queue state");
         result.Errors[0].Metadata.Should().ContainKey("status");
         result.Errors[0].Metadata["status"].Should().Be(500);
-        _mockKafkaService.Verify(x => x.PublishMatchRequestAsync(
+        _mockKafkaProducer.Verify(x => x.ProduceAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
             It.IsAny<MatchRequest>(),
             It.IsAny<CancellationToken>()),
             Times.Never);
@@ -176,9 +199,15 @@ public class MatchmakingServiceTests
         _mockRateLimitService
             .Setup(x => x.IsUserInQueueAsync(userId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result.Ok(false));
-        _mockKafkaService
-            .Setup(x => x.PublishMatchRequestAsync(It.IsAny<MatchRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result.Fail("Kafka connection failed"));
+        _mockKafkaProducer
+            .Setup(x => x.ProduceAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<MatchRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ProduceException<string, MatchRequest>(
+                new Confluent.Kafka.Error(ErrorCode.Local_MsgTimedOut),
+                new DeliveryResult<string, MatchRequest>()));
 
         var result = await _service.SearchMatchAsync(userId, CancellationToken.None);
 

@@ -1,12 +1,11 @@
 ﻿using FluentResults;
+using MatchMaking.Service.DTOs;
 
 namespace MatchMaking.Service.Services.Abstracts
 {
     public interface IMatchmakingService
     {
-        Task<Result> SearchMatchAsync(string userId, CancellationToken ct = default);
-        Task<Result<MatchDto>> GetMatchAsync(string userId, CancellationToken ct = default);
+        Task<Result> SearchMatchAsync(string userId, CancellationToken ct);
+        Task<Result<MatchDto>> GetMatchAsync(string userId, CancellationToken ct);
     }
-
-    public sealed record MatchDto(string MatchId, IReadOnlyList<string> UserIds);
 }

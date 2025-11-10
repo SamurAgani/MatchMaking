@@ -1,0 +1,26 @@
+using System.Text.Json;
+using Confluent.Kafka;
+
+namespace MatchMaking.Infrastructure.Kafka.Serialization;
+
+public class JsonSerializer<T> : ISerializer<T>
+{
+    public byte[] Serialize(T data, SerializationContext context)
+    {
+        if (data == null)
+            return Array.Empty<byte>();
+
+        return JsonSerializer.SerializeToUtf8Bytes(data);
+    }
+}
+
+public class JsonDeserializer<T> : IDeserializer<T>
+{
+    public T Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context)
+    {
+        if (isNull || data.IsEmpty)
+            return default!;
+
+        return JsonSerializer.Deserialize<T>(data)!;
+    }
+}

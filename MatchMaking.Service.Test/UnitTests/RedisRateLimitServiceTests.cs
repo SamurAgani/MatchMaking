@@ -14,6 +14,7 @@ public class RedisRateLimitServiceTests
     private readonly Mock<IConfiguration> _mockConfiguration;
     private readonly Mock<IConfigurationSection> _mockConfigSection;
     private readonly Mock<ILogger<RedisRateLimitService>> _mockLogger;
+    private readonly TimeProvider _timeProvider;
     private readonly RedisRateLimitService _service;
 
     public RedisRateLimitServiceTests()
@@ -23,6 +24,7 @@ public class RedisRateLimitServiceTests
         _mockConfiguration = new Mock<IConfiguration>();
         _mockConfigSection = new Mock<IConfigurationSection>();
         _mockLogger = new Mock<ILogger<RedisRateLimitService>>();
+        _timeProvider = TimeProvider.System;
 
         _mockRedis.Setup(x => x.GetDatabase(It.IsAny<int>(), It.IsAny<object>()))
             .Returns(_mockDatabase.Object);
@@ -34,7 +36,8 @@ public class RedisRateLimitServiceTests
         _service = new RedisRateLimitService(
             _mockRedis.Object,
             _mockConfiguration.Object,
-            _mockLogger.Object);
+            _mockLogger.Object,
+            _timeProvider);
     }
 
     [Fact]

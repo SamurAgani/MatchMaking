@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\MatchMaking.Infrastructure\MatchMaking.Infrastructure.csproj" />
     <ProjectReference Include="..\MatchMaking.Shared\MatchMaking.Shared.csproj" />
   </ItemGroup>
 </Project>

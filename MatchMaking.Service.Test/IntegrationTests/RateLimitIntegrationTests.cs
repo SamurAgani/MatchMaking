@@ -42,7 +42,8 @@ public class RateLimitIntegrationTests
                 return true;
             });
 
-        var service = new RedisRateLimitService(mockRedis.Object, mockConfiguration.Object, mockLogger.Object);
+        var timeProvider = TimeProvider.System;
+        var service = new RedisRateLimitService(mockRedis.Object, mockConfiguration.Object, mockLogger.Object, timeProvider);
         var userId = "test-user";
 
         var result1 = await service.IsRateLimitedAsync(userId, CancellationToken.None);
@@ -89,7 +90,8 @@ public class RateLimitIntegrationTests
                 return true;
             });
 
-        var service = new RedisRateLimitService(mockRedis.Object, mockConfiguration.Object, mockLogger.Object);
+        var timeProvider = TimeProvider.System;
+        var service = new RedisRateLimitService(mockRedis.Object, mockConfiguration.Object, mockLogger.Object, timeProvider);
 
         var user1Result = await service.IsRateLimitedAsync("user1", CancellationToken.None);
         var user2Result = await service.IsRateLimitedAsync("user2", CancellationToken.None);
@@ -141,7 +143,8 @@ public class RateLimitIntegrationTests
                 }
             });
 
-        var service = new RedisRateLimitService(mockRedis.Object, mockConfiguration.Object, mockLogger.Object);
+        var timeProvider = TimeProvider.System;
+        var service = new RedisRateLimitService(mockRedis.Object, mockConfiguration.Object, mockLogger.Object, timeProvider);
         var userId = "concurrent-user";
 
         var tasks = Enumerable.Range(0, 10)
@@ -188,7 +191,8 @@ public class RateLimitIntegrationTests
                 return true;
             });
 
-        var service = new RedisRateLimitService(mockRedis.Object, mockConfiguration.Object, mockLogger.Object);
+        var timeProvider = TimeProvider.System;
+        var service = new RedisRateLimitService(mockRedis.Object, mockConfiguration.Object, mockLogger.Object, timeProvider);
         var userId = "delayed-user";
 
         var result1 = await service.IsRateLimitedAsync(userId, CancellationToken.None);

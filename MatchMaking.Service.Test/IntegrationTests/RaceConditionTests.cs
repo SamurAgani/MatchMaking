@@ -1,6 +1,7 @@
 using FluentAssertions;
 using FluentResults;
 using MatchMaking.Service.Controllers;
+using MatchMaking.Service.DTOs;
 using MatchMaking.Service.Services.Abstracts;
 using MatchMaking.Shared.Models;
 using Microsoft.AspNetCore.Mvc;
