@@ -1,0 +1,118 @@
+version: "3.8"
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+
+  redis:
+    image: redis:7.4
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8082:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.7.1
+    depends_on:
+      - kafka
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      kafka-topics --bootstrap-server kafka:29092 --list
+
+      echo -e 'Creating kafka topics'
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic matchmaking.request --replication-factor 1 --partitions 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic matchmaking.complete --replication-factor 1 --partitions 1
+
+      echo -e 'Successfully created the following topics:'
+      kafka-topics --bootstrap-server kafka:29092 --list
+      "
+
+  # matchmaking-service:
+  #   build:
+  #     context: .
+  #     dockerfile: MatchMaking.Service/Dockerfile
+  #   container_name: matchmaking-service
+  #   depends_on:
+  #     - kafka
+  #     - redis
+  #   ports:
+  #     - "8080:8080"
+  #     - "8081:8081"
+  #   environment:
+  #     ASPNETCORE_ENVIRONMENT: Development
+  #     Kafka__BootstrapServers: kafka:29092
+  #     Kafka__RequestTopic: matchmaking.request
+  #     Kafka__CompleteTopic: matchmaking.complete
+  #     Redis__ConnectionString: redis:6379
+
+  # matchmaking-worker-1:
+  #   build:
+  #     context: .
+  #     dockerfile: MatchMaking.Worker/Dockerfile
+  #   container_name: matchmaking-worker-1
+  #   depends_on:
+  #     - kafka
+  #     - redis
+  #   environment:
+  #     Kafka__BootstrapServers: kafka:29092
+  #     Kafka__RequestTopic: matchmaking.request
+  #     Kafka__CompleteTopic: matchmaking.complete
+  #     Redis__ConnectionString: redis:6379
+  #     UsersPerMatch: 3
+
+  # matchmaking-worker-2:
+  #   build:
+  #     context: .
+  #     dockerfile: MatchMaking.Worker/Dockerfile
+  #   container_name: matchmaking-worker-2
+  #   depends_on:
+  #     - kafka
+  #     - redis
+  #   environment:
+  #     Kafka__BootstrapServers: kafka:29092
+  #     Kafka__RequestTopic: matchmaking.request
+  #     Kafka__CompleteTopic: matchmaking.complete
+  #     Redis__ConnectionString: redis:6379
+  #     UsersPerMatch: 3
+
+volumes:
+  redis_data:
